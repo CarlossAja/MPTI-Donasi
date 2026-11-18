@@ -1,0 +1,1188 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aksi Dana — Sistem Donasi Live</title>
+  <meta name="description" content="Aksi Dana: Sistem Donasi Live untuk Acara Penggalangan Dana Sosial">
+  <meta name="referrer" content="no-referrer">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { fontFamily: { sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'] } } },
+    };
+  </script>
+  <script src="https://unpkg.com/lucide@0.454.0/dist/umd/lucide.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/countup.js@2.8.0/dist/countUp.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5/dist/sweetalert2.all.min.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <style type="text/tailwindcss">
+    [hidden] { display: none !important; }
+    .card { @apply rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6; }
+    .card-title { @apply mb-4 flex items-center gap-2 text-lg font-bold text-slate-900; }
+    .label { @apply mb-1.5 block text-sm font-semibold text-slate-800; }
+    .input { @apply block min-h-[44px] w-full rounded-xl border border-slate-500 bg-white px-3 py-2.5 text-base text-slate-900 placeholder:text-slate-500; }
+    .input:focus-visible, .btn:focus-visible, a:focus-visible, input[type="checkbox"]:focus-visible { @apply outline outline-[3px] outline-offset-2 outline-amber-600; }
+    .input[aria-invalid="true"] { @apply border-2 border-red-700; }
+    .hint { @apply mt-1 text-sm text-slate-600; }
+    .err { @apply mt-1 text-sm font-semibold text-red-700; }
+    .btn { @apply inline-flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-base font-semibold transition; }
+    .btn-primary { @apply bg-emerald-700 text-white hover:bg-emerald-800; }
+    .btn-outline { @apply border border-slate-500 bg-white text-slate-900 hover:bg-slate-100; }
+    .btn-danger { @apply border border-red-700 bg-white text-red-700 hover:bg-red-50; }
+    .btn-sm { @apply min-h-[40px] px-3 py-1.5 text-sm; }
+    .btn:disabled { @apply cursor-not-allowed opacity-60; }
+    .badge { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold; }
+    .feed-new { animation: feedflash 2.6s ease-out; }
+    @keyframes feedflash { from { background: #d1fae5; } to { background: transparent; } }
+    .dot-live { animation: dotpulse 1.6s infinite; }
+    @keyframes dotpulse { 50% { opacity: .3; } }
+
+    /* Tahapan pemindaian AI di dalam SweetAlert2 */
+    .scan { @apply m-0 list-none space-y-3 p-0 text-left; }
+    .scan li { @apply flex items-start gap-3 text-slate-900; }
+    .scan .ic { @apply mt-0.5 grid h-6 w-6 flex-none place-items-center rounded-full border-2 border-slate-400 text-xs font-bold; }
+    .scan b { @apply block text-sm font-semibold; }
+    .scan small { @apply block break-words text-xs text-slate-600; }
+    .scan li[data-s="run"] .ic { @apply animate-spin border-emerald-700 border-t-transparent; }
+    .scan li[data-s="ok"] .ic { @apply border-emerald-700 bg-emerald-700 text-white; }
+    .scan li[data-s="ok"] .ic::before { content: "✓"; }
+    .scan li[data-s="warn"] .ic { @apply border-amber-700 bg-amber-100 text-amber-900; }
+    .scan li[data-s="warn"] .ic::before { content: "!"; }
+    .scan li[data-s="fail"] .ic { @apply border-red-700 bg-red-700 text-white; }
+    .scan li[data-s="fail"] .ic::before { content: "✕"; }
+    .swal2-popup { font-family: "Plus Jakarta Sans", system-ui, sans-serif; border-radius: 1rem; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before { animation: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-slate-50 font-sans text-slate-900 antialiased">
+  <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:font-semibold">Lewati ke konten</a>
+
+  <header class="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-4">
+    <a href="./" id="homeLink" class="flex items-center gap-2 rounded-lg text-lg font-extrabold text-slate-900">
+      <span class="grid h-9 w-9 place-items-center rounded-xl bg-emerald-700 text-white"><i data-lucide="heart-handshake" class="h-5 w-5"></i></span>
+      Aksi Dana
+    </a>
+    <span id="connBadge" class="badge bg-slate-200 text-slate-800" role="status" hidden></span>
+  </header>
+
+  <main id="main" class="mx-auto max-w-5xl px-4 pb-16">
+    <noscript><p class="card">Aplikasi ini membutuhkan JavaScript.</p></noscript>
+
+    <!-- ============ FORM INISIASI ACARA (HOST) ============ -->
+    <section id="setup" hidden class="mx-auto max-w-2xl">
+      <div class="pb-6 pt-4">
+        <h1 class="text-3xl font-extrabold tracking-tight sm:text-4xl">Tampilkan progres donasi acara Anda secara langsung.</h1>
+        <p class="mt-3 text-slate-700">Isi data acara, bagikan link atau kode QR, dan setiap donasi langsung tampil di semua layar — tanpa pengumuman manual.</p>
+      </div>
+      <form id="setupForm" class="card space-y-4" novalidate>
+        <h2 class="card-title"><i data-lucide="calendar-heart" class="h-5 w-5 text-emerald-700"></i>Data acara</h2>
+        <div>
+          <label class="label" for="fOrganizer">Nama pengelola</label>
+          <input class="input" id="fOrganizer" maxlength="60" autocomplete="organization" placeholder="Panitia Peduli Sukamaju">
+          <p class="err" id="fOrganizerErr" hidden></p>
+        </div>
+        <div>
+          <label class="label" for="fEvent">Nama acara</label>
+          <input class="input" id="fEvent" maxlength="90" placeholder="Bantuan Banjir Desa Sukamaju">
+          <p class="err" id="fEventErr" hidden></p>
+        </div>
+        <div>
+          <label class="label" for="fTarget">Target dana (Rp)</label>
+          <input class="input" id="fTarget" inputmode="numeric" placeholder="10.000.000" aria-describedby="fTargetErr">
+          <p class="err" id="fTargetErr" hidden></p>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="label" for="fBank">Nama bank</label>
+            <input class="input" id="fBank" maxlength="30" placeholder="BCA">
+            <p class="err" id="fBankErr" hidden></p>
+          </div>
+          <div>
+            <label class="label" for="fAccNo">Nomor rekening</label>
+            <input class="input" id="fAccNo" inputmode="numeric" maxlength="24" placeholder="1234567890">
+            <p class="err" id="fAccNoErr" hidden></p>
+          </div>
+        </div>
+        <div>
+          <label class="label" for="fAccName">Atas nama</label>
+          <input class="input" id="fAccName" maxlength="60" placeholder="Panitia Peduli Sukamaju">
+          <p class="err" id="fAccNameErr" hidden></p>
+        </div>
+        <button class="btn btn-primary w-full" type="submit"><i data-lucide="radio" class="h-5 w-5"></i>Simpan &amp; mulai siaran</button>
+        <p class="hint">Data sesi hanya disimpan di browser perangkat ini dan terhapus saat sesi ditutup.</p>
+      </form>
+    </section>
+
+    <!-- ============ APLIKASI (HOST & DONATUR) ============ -->
+    <div id="app" hidden>
+      <div id="closedBanner" hidden class="mb-5 rounded-2xl border border-amber-700 bg-amber-50 p-4 font-semibold text-amber-900" role="status">
+        Sesi acara telah ditutup oleh panitia. Terima kasih atas dukungan Anda.
+      </div>
+      <p id="hostHint" hidden class="mb-5 rounded-2xl border border-slate-300 bg-white p-4 text-slate-800">
+        Sesi panitia untuk acara ini tersimpan di browser ini. <a id="hostHintLink" class="font-semibold text-emerald-800 underline" href="./">Buka dasbor panitia</a>
+      </p>
+
+      <div class="grid gap-5 lg:grid-cols-5">
+        <!-- Hero counter + progress -->
+        <section class="rounded-2xl bg-emerald-800 p-5 text-white shadow-sm sm:p-7 lg:col-span-3" aria-labelledby="evName">
+          <p class="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-emerald-50">
+            <span id="liveDot" class="h-2 w-2 rounded-full bg-emerald-50"></span><span id="liveText">Donasi live</span>
+          </p>
+          <h1 id="evName" class="mt-3 break-words text-2xl font-extrabold sm:text-3xl">Memuat acara…</h1>
+          <p id="evBy" class="mt-1 text-sm text-emerald-50"></p>
+          <p class="mt-6 text-sm font-semibold text-emerald-50">Total donasi terkumpul</p>
+          <p id="counter" class="break-words text-4xl font-extrabold tabular-nums tracking-tight sm:text-6xl">Rp 0</p>
+          <p id="targetText" class="mt-1 text-emerald-50"></p>
+          <div id="progress" class="mt-5 h-4 overflow-hidden rounded-full bg-emerald-950" role="progressbar" aria-label="Pencapaian target donasi" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div id="progressFill" class="h-full w-0 rounded-full bg-amber-300 transition-[width] duration-1000 ease-out"></div>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+            <span><b id="pct" class="tabular-nums">0%</b> tercapai</span>
+            <span><b id="count" class="tabular-nums">0</b> donasi</span>
+          </div>
+        </section>
+
+        <!-- Kolom samping -->
+        <div class="space-y-5 lg:col-span-2 lg:row-span-2">
+          <!-- HOST: bagikan -->
+          <section id="shareCard" class="card" hidden>
+            <h2 class="card-title"><i data-lucide="share-2" class="h-5 w-5 text-emerald-700"></i>Bagikan ke donatur</h2>
+            <label class="label" for="shareLink">Link acara</label>
+            <div class="flex gap-2">
+              <input class="input min-w-0 flex-1 text-sm" id="shareLink" readonly>
+              <button class="btn btn-primary" type="button" id="copyLink"><i data-lucide="copy" class="h-4 w-4"></i><span>Copy Link</span></button>
+            </div>
+            <div class="mt-4 flex flex-col items-center gap-2">
+              <div id="qr" class="rounded-xl border border-slate-200 bg-white p-3" role="img" aria-label="Kode QR link acara"></div>
+              <p class="hint text-center">Pindai untuk membuka halaman donasi di HP.</p>
+            </div>
+            <p class="hint mt-3">Biarkan tab ini tetap terbuka selama acara: tab inilah yang menyiarkan data ke perangkat lain.</p>
+          </section>
+
+          <!-- DONATUR: rekening + form -->
+          <section id="donorCard" class="card" hidden>
+            <h2 class="card-title"><i data-lucide="hand-coins" class="h-5 w-5 text-emerald-700"></i>Kirim donasi</h2>
+            <p class="text-sm font-semibold text-slate-800">1. Transfer ke rekening berikut</p>
+            <div class="mt-2 rounded-xl border border-dashed border-slate-500 bg-slate-50 p-3">
+              <p class="text-sm text-slate-700" id="bankName"></p>
+              <div class="flex items-center justify-between gap-2">
+                <p class="break-all text-xl font-extrabold tabular-nums" id="accNo"></p>
+                <button class="btn btn-outline btn-sm flex-none" type="button" id="copyAcc"><i data-lucide="copy" class="h-4 w-4"></i><span>Salin</span></button>
+              </div>
+              <p class="text-sm text-slate-700">a.n. <span id="accName" class="font-semibold text-slate-900"></span></p>
+            </div>
+
+            <p class="mt-5 text-sm font-semibold text-slate-800">2. Isi formulir dan unggah bukti transfer</p>
+            <form id="donateForm" class="mt-2 space-y-4" novalidate>
+              <div>
+                <label class="label" for="dName">Nama donatur</label>
+                <input class="input" id="dName" maxlength="60" autocomplete="name" placeholder="Nama Anda">
+                <label class="mt-2 flex min-h-[44px] cursor-pointer items-center gap-2 text-sm text-slate-800">
+                  <input type="checkbox" id="dAnon" class="h-5 w-5 rounded accent-emerald-700"> Tampilkan sebagai “Hamba Allah”
+                </label>
+                <p class="err" id="dNameErr" hidden></p>
+              </div>
+              <div>
+                <label class="label" for="dAmount">Nominal donasi (Rp)</label>
+                <input class="input" id="dAmount" inputmode="numeric" placeholder="50.000" aria-describedby="dAmountHint dAmountErr">
+                <p class="hint" id="dAmountHint">Minimal Rp 1.000, sesuai nominal pada bukti transfer.</p>
+                <p class="err" id="dAmountErr" hidden></p>
+              </div>
+              <div>
+                <label class="label" for="dMessage">Pesan / doa (opsional)</label>
+                <textarea class="input" id="dMessage" rows="2" maxlength="200" placeholder="Semoga bermanfaat."></textarea>
+              </div>
+              <div>
+                <label class="label" for="dProof">Bukti transfer (JPG/PNG)</label>
+                <input class="input p-2 text-sm" type="file" id="dProof" accept="image/jpeg,image/png" aria-describedby="dProofHint dProofErr">
+                <p class="hint" id="dProofHint">Maksimal 5 MB. Gambar diperiksa di perangkat Anda; yang dikirim ke panitia hanya sidik jari dan pratinjau kecil.</p>
+                <p class="err" id="dProofErr" hidden></p>
+                <img id="dPreview" hidden alt="Pratinjau bukti transfer" class="mt-2 max-h-48 rounded-xl border border-slate-300">
+              </div>
+              <button class="btn btn-primary w-full" type="submit" id="dSubmit"><i data-lucide="scan-search" class="h-5 w-5"></i>Verifikasi &amp; kirim donasi</button>
+            </form>
+          </section>
+        </div>
+
+        <!-- Feed -->
+        <section class="card lg:col-span-3" aria-labelledby="feedTitle">
+          <h2 class="card-title" id="feedTitle"><i data-lucide="activity" class="h-5 w-5 text-emerald-700"></i>Donasi terbaru</h2>
+          <ul id="feed" class="divide-y divide-slate-200"></ul>
+          <p id="feedEmpty" class="text-slate-700">Belum ada donasi. Jadilah yang pertama.</p>
+        </section>
+      </div>
+
+      <!-- ============ PANEL KONTROL PANITIA ============ -->
+      <section id="hostPanel" hidden class="mt-5 space-y-5" aria-labelledby="panelTitle">
+        <h2 id="panelTitle" class="pt-2 text-xl font-extrabold">Panel kontrol panitia</h2>
+
+        <form id="manualForm" class="card" novalidate>
+          <h3 class="card-title"><i data-lucide="square-pen" class="h-5 w-5 text-emerald-700"></i>Input donasi manual</h3>
+          <p class="hint -mt-2 mb-4">Untuk donasi tunai atau yang sudah diverifikasi langsung oleh panitia.</p>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label class="label" for="mName">Nama donatur</label>
+              <input class="input" id="mName" maxlength="60" placeholder="Kosongkan untuk “Hamba Allah”">
+            </div>
+            <div>
+              <label class="label" for="mAmount">Nominal (Rp)</label>
+              <input class="input" id="mAmount" inputmode="numeric" placeholder="100.000" aria-describedby="mAmountErr">
+              <p class="err" id="mAmountErr" hidden></p>
+            </div>
+          </div>
+          <div class="mt-4">
+            <label class="label" for="mMessage">Pesan / doa (opsional)</label>
+            <input class="input" id="mMessage" maxlength="200">
+          </div>
+          <button class="btn btn-primary mt-4 w-full sm:w-auto" type="submit"><i data-lucide="plus" class="h-5 w-5"></i>Catat donasi</button>
+        </form>
+
+        <section class="card" aria-labelledby="auditTitle">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h3 class="card-title mb-0" id="auditTitle"><i data-lucide="shield-check" class="h-5 w-5 text-emerald-700"></i>Log audit AI</h3>
+            <button class="btn btn-outline btn-sm" type="button" id="csvBtn"><i data-lucide="download" class="h-4 w-4"></i>Unduh rekap CSV</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[720px] text-left text-sm">
+              <thead class="text-xs uppercase tracking-wide text-slate-700">
+                <tr class="border-b border-slate-300">
+                  <th scope="col" class="py-2 pr-3">Waktu</th>
+                  <th scope="col" class="py-2 pr-3">Donatur</th>
+                  <th scope="col" class="py-2 pr-3">Nominal</th>
+                  <th scope="col" class="py-2 pr-3">Status struk</th>
+                  <th scope="col" class="py-2 pr-3">Hash</th>
+                  <th scope="col" class="py-2 pr-3">Bukti</th>
+                  <th scope="col" class="py-2"><span class="sr-only">Aksi</span></th>
+                </tr>
+              </thead>
+              <tbody id="auditRows"></tbody>
+            </table>
+          </div>
+          <p id="auditEmpty" class="text-slate-700">Belum ada aktivitas.</p>
+        </section>
+
+        <section class="card border-red-200">
+          <h3 class="card-title"><i data-lucide="power" class="h-5 w-5 text-red-700"></i>Akhiri acara</h3>
+          <p class="mb-4 text-slate-700">Menutup sesi menghentikan siaran dan menghapus seluruh data sesi dari browser ini. Unduh rekap CSV terlebih dahulu bila diperlukan.</p>
+          <button class="btn btn-danger" type="button" id="closeBtn"><i data-lucide="trash-2" class="h-5 w-5"></i>Tutup Sesi Acara</button>
+        </section>
+      </section>
+    </div>
+
+    <p id="announcer" class="sr-only" aria-live="polite"></p>
+  </main>
+
+<script>
+/* =====================================================================
+   AKSI DANA — Sistem Donasi Live (satu berkas, tanpa server database)
+   - Tab panitia (host) memegang data sesi dan menyiarkannya.
+   - Sinkron antar-tab: BroadcastChannel. Lintas perangkat: PeerJS (WebRTC).
+   - Verifikasi bukti: SHA-256, dHash (Canvas), OCR (Tesseract.js).
+   ===================================================================== */
+'use strict';
+
+// ---------- Konstanta ----------
+const MIN_NOMINAL = 1000;            // CR-001
+const MAX_NOMINAL = 100_000_000_000;
+const MAX_FILE = 5 * 1024 * 1024;
+const DHASH_THRESHOLD = 0.9;         // kemiripan visual >= 90% dianggap duplikat
+const FEED_LIMIT = 50;
+const STORE_KEY = 'aksidana.host';
+const PEER_PREFIX = 'aksidana-';
+
+// ---------- Utilitas ----------
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const rp = (n) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
+const clip = (v, max) => String(v ?? '').trim().slice(0, max);
+const jam = (ts) => new Date(ts).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+function uid(len = 10) {
+  const a = new Uint8Array(len);
+  crypto.getRandomValues(a);
+  return Array.from(a, (b) => (b % 36).toString(36)).join('');
+}
+
+// Validasi nominal (CR-001 / ISS-01): tolak kosong, nol, negatif, bukan angka, < Rp 1.000
+function parseNominal(raw) {
+  const s = String(raw ?? '').trim().replace(/^rp\.?\s*/i, '');
+  if (!s) return { error: 'Nominal wajib diisi.' };
+  if (s.includes('-')) return { error: 'Nominal tidak boleh negatif.' };
+  if (!/^\d[\d.\s]*$/.test(s)) return { error: 'Nominal harus berupa angka bulat, contoh 50.000.' };
+  const n = Number(s.replace(/[.\s]/g, ''));
+  if (!Number.isSafeInteger(n)) return { error: 'Nominal tidak valid.' };
+  if (n === 0) return { error: 'Nominal tidak boleh nol.' };
+  if (n < MIN_NOMINAL) return { error: 'Nominal minimal ' + rp(MIN_NOMINAL) + '.' };
+  if (n > MAX_NOMINAL) return { error: 'Nominal terlalu besar.' };
+  return { value: n };
+}
+
+// Pemisah ribuan otomatis, hanya bila isinya memang angka (agar input salah tetap terlihat & divalidasi)
+function bindNominal(input) {
+  input.addEventListener('input', () => {
+    if (!/^[\d.]*$/.test(input.value)) return;
+    const d = input.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+    input.value = d ? Number(d).toLocaleString('id-ID') : '';
+  });
+}
+
+function fieldError(id, msg) {
+  const input = $(id), err = $(id + 'Err');
+  if (err) { err.textContent = msg || ''; err.hidden = !msg; }
+  if (msg) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
+  return !msg;
+}
+
+async function copyText(text, btn) {
+  try { await navigator.clipboard.writeText(text); }
+  catch {
+    const t = document.createElement('textarea');
+    t.value = text; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
+    document.body.append(t); t.select(); document.execCommand('copy'); t.remove();
+  }
+  const label = btn && btn.querySelector('span');
+  if (label) { const old = label.textContent; label.textContent = 'Tersalin'; setTimeout(() => (label.textContent = old), 1500); }
+}
+
+const toast = (icon, title) => window.Swal
+  ? Swal.fire({ toast: true, position: 'top', icon, title, timer: 2600, showConfirmButton: false })
+  : alert(title);
+
+// Parameter link: konfigurasi acara di-encode Base64 (URL-safe)
+const encodeCfg = (cfg) => btoa(unescape(encodeURIComponent(JSON.stringify(cfg)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function decodeCfg(s) {
+  try {
+    const c = JSON.parse(decodeURIComponent(escape(atob(String(s).replace(/-/g, '+').replace(/_/g, '/')))));
+    return cleanCfg(c);
+  } catch { return null; }
+}
+function cleanCfg(c) {
+  if (!c || typeof c !== 'object') return null;
+  const target = Number(c.target);
+  if (!Number.isSafeInteger(target) || target < MIN_NOMINAL) return null;
+  return { organizer: clip(c.organizer, 60), event: clip(c.event, 90), target, bank: clip(c.bank, 30), accNo: clip(c.accNo, 24), accName: clip(c.accName, 60) };
+}
+
+// =====================================================================
+//  ENGINE VERIFIKASI BUKTI (berjalan di perangkat donatur)
+// =====================================================================
+
+// SHA-256 murni JS — cadangan bila Web Crypto tidak tersedia (halaman dibuka lewat http biasa)
+function sha256Js(bytes) {
+  const K = [], H = [];
+  const frac = (x) => ((x - Math.floor(x)) * 4294967296) | 0;
+  for (let n = 2, i = 0; i < 64; n++) {
+    let prime = true;
+    for (let d = 2; d * d <= n; d++) if (n % d === 0) { prime = false; break; }
+    if (!prime) continue;
+    if (i < 8) H[i] = frac(Math.sqrt(n));
+    K[i++] = frac(Math.cbrt(n));
+  }
+  const len = bytes.length, padLen = ((len + 9 + 63) >> 6) << 6;
+  const m = new Uint8Array(padLen); m.set(bytes); m[len] = 0x80;
+  const dv = new DataView(m.buffer);
+  dv.setUint32(padLen - 8, Math.floor((len * 8) / 4294967296));
+  dv.setUint32(padLen - 4, (len * 8) >>> 0);
+  const w = new Int32Array(64);
+  let h = H.slice();
+  for (let o = 0; o < padLen; o += 64) {
+    for (let t = 0; t < 16; t++) w[t] = dv.getInt32(o + t * 4);
+    for (let t = 16; t < 64; t++) {
+      const x = w[t - 15], y = w[t - 2];
+      const s0 = ((x >>> 7) | (x << 25)) ^ ((x >>> 18) | (x << 14)) ^ (x >>> 3);
+      const s1 = ((y >>> 17) | (y << 15)) ^ ((y >>> 19) | (y << 13)) ^ (y >>> 10);
+      w[t] = (w[t - 16] + s0 + w[t - 7] + s1) | 0;
+    }
+    let [a, b, c, d, e, f, g, hh] = h;
+    for (let t = 0; t < 64; t++) {
+      const S1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7));
+      const t1 = (hh + S1 + ((e & f) ^ (~e & g)) + K[t] + w[t]) | 0;
+      const S0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10));
+      const t2 = (S0 + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+      hh = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    h = [h[0] + a, h[1] + b, h[2] + c, h[3] + d, h[4] + e, h[5] + f, h[6] + g, h[7] + hh].map((v) => v | 0);
+  }
+  return h.map((v) => (v >>> 0).toString(16).padStart(8, '0')).join('');
+}
+
+// Lapis 1: sidik jari kriptografis berkas
+async function sha256Hex(buffer) {
+  if (window.crypto && crypto.subtle) {
+    const digest = await crypto.subtle.digest('SHA-256', buffer);
+    return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  return sha256Js(new Uint8Array(buffer));
+}
+
+function loadImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Gambar tidak dapat dibaca.')); };
+    img.src = url;
+  });
+}
+
+function drawScaled(img, w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0, w, h);
+  return c;
+}
+
+// Lapis 2: perceptual dHash — grayscale 9x8, bandingkan piksel bersebelahan -> 64 bit
+function dHashHex(img) {
+  const px = drawScaled(img, 9, 8).getContext('2d').getImageData(0, 0, 9, 8).data;
+  const gray = [];
+  for (let i = 0; i < 72; i++) gray.push(0.299 * px[i * 4] + 0.587 * px[i * 4 + 1] + 0.114 * px[i * 4 + 2]);
+  let hex = '';
+  for (let y = 0; y < 8; y++) {
+    let byte = 0;
+    for (let x = 0; x < 8; x++) byte = (byte << 1) | (gray[y * 9 + x] > gray[y * 9 + x + 1] ? 1 : 0);
+    hex += byte.toString(16).padStart(2, '0');
+  }
+  return hex;
+}
+
+function hammingHex(a, b) {
+  let dist = 0;
+  for (let i = 0; i < a.length; i++) {
+    let x = parseInt(a[i], 16) ^ parseInt(b[i], 16);
+    while (x) { dist += x & 1; x >>= 1; }
+  }
+  return dist;
+}
+const similarity = (a, b) => 1 - hammingHex(a, b) / 64;
+
+// Lapis 3: OCR
+function fitCanvas(img, maxSide) {
+  const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+  return drawScaled(img, Math.max(1, Math.round(img.naturalWidth * scale)), Math.max(1, Math.round(img.naturalHeight * scale)));
+}
+
+async function ocrText(img, onProgress) {
+  if (!window.Tesseract) throw new Error('Mesin OCR tidak termuat.');
+  const job = Tesseract.recognize(fitCanvas(img, 1600), 'eng', {
+    logger: (m) => onProgress(m.status === 'recognizing text' ? `Membaca teks struk… ${Math.round(m.progress * 100)}%` : 'Menyiapkan mesin OCR…'),
+  });
+  const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('OCR melewati batas waktu.')), 45000));
+  const { data } = await Promise.race([job, timeout]);
+  return data.text || '';
+}
+
+// Semua angka nominal yang terbaca di struk (50.000 / 50,000.00 / 50000)
+function amountsInText(text) {
+  const out = new Set();
+  const re = /\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?(?!\d)|\d+(?:[.,]\d{2})?(?!\d)/g;
+  for (const token of text.match(re) || []) {
+    const grouped = /^\d{1,3}(?:[.,]\d{3})+/.test(token);
+    const whole = grouped ? token.replace(/[.,]\d{1,2}$/, '') : token.replace(/[.,]\d{2}$/, '');
+    const n = Number(whole.replace(/[.,]/g, ''));
+    if (Number.isSafeInteger(n) && n > 0) out.add(n);
+  }
+  return out;
+}
+
+// Nomor referensi / ID transaksi pada struk
+function referenceInText(text) {
+  const re = /(?:NO(?:MOR)?\.?\s*REF(?:ERENSI|ERENCE|F)?\.?|REF(?:ERENSI|ERENCE)?\.?\s*(?:NO|NUMBER|NUM|ID)?\.?|ID\s*TRANSAKSI|TRANSACTION\s*ID|NO(?:MOR)?\.?\s*TRANSAKSI|KODE\s*TRANSAKSI|TRX\s*ID|RRN)\s*[:#.\-]?\s*([A-Z0-9][A-Z0-9\-\/]{5,31})/g;
+  for (const m of text.toUpperCase().matchAll(re)) {
+    const ref = m[1].replace(/[^A-Z0-9]/g, '');
+    if (ref.length >= 6 && (ref.match(/\d/g) || []).length >= 4) return ref.slice(0, 32);
+  }
+  return null;
+}
+
+// ---------- Visualisasi tahapan AI (SweetAlert2) ----------
+const SCAN_STEPS = [
+  ['sha', 'Lapis 1 · Sidik jari berkas (SHA-256)'],
+  ['dhash', 'Lapis 2 · Kemiripan visual (dHash)'],
+  ['ocr', 'Lapis 3 · Teks struk & nomor referensi (OCR)'],
+  ['final', 'Pengesahan & siaran ke semua layar'],
+];
+function scanOpen() {
+  Swal.fire({
+    title: 'Verifikasi AI bukti transfer',
+    html: '<ul class="scan" aria-live="polite">' + SCAN_STEPS.map(([k, label]) =>
+      `<li id="scan-${k}" data-s="wait"><span class="ic" aria-hidden="true"></span><div><b>${label}</b><small>Menunggu…</small></div></li>`).join('') + '</ul>',
+    allowOutsideClick: false, allowEscapeKey: false, showConfirmButton: false,
+  });
+}
+function scanSet(key, status, detail) {
+  const li = $('scan-' + key);
+  if (!li) return;
+  li.dataset.s = status;
+  li.querySelector('small').textContent = detail || '';
+}
+
+// =====================================================================
+//  TAMPILAN BERSAMA (hero counter, progress bar, feed)
+// =====================================================================
+const view = { counter: null, timer: 0, known: null, pub: null };
+
+function setCounter(total) {
+  const node = $('counter');
+  const finalText = rp(total);
+  if (window.countUp && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (!view.counter) {
+      view.counter = new countUp.CountUp(node, total, { duration: 1.2, separator: '.', decimal: ',', prefix: 'Rp ' });
+      view.counter.start();
+    } else view.counter.update(total);
+  } else node.textContent = finalText;
+  // Tab di latar belakang tidak menjalankan animasi: pastikan angka akhir tetap benar
+  clearTimeout(view.timer);
+  view.timer = setTimeout(() => { node.textContent = finalText; }, 1600);
+}
+
+function render(pub) {
+  view.pub = pub;
+  const { cfg } = pub;
+  document.title = cfg.event + ' — Aksi Dana';
+  $('evName').textContent = cfg.event;
+  $('evBy').textContent = 'Diselenggarakan oleh ' + cfg.organizer;
+  $('targetText').textContent = 'dari target ' + rp(cfg.target);
+  $('bankName').textContent = 'Bank ' + cfg.bank;
+  $('accNo').textContent = cfg.accNo;
+  $('accName').textContent = cfg.accName;
+
+  setCounter(pub.total);
+  const pct = (pub.total / cfg.target) * 100;
+  $('progressFill').style.width = Math.min(100, pct) + '%';
+  $('progress').setAttribute('aria-valuenow', String(Math.min(100, Math.round(pct))));
+  $('progress').setAttribute('aria-valuetext', `${Math.floor(pct)}% dari target, ${rp(pub.total)} terkumpul`);
+  $('pct').textContent = (pct >= 10 ? Math.floor(pct) : Math.floor(pct * 10) / 10).toLocaleString('id-ID') + '%';
+  $('count').textContent = pub.count.toLocaleString('id-ID');
+
+  const first = view.known === null;
+  if (first) view.known = new Set();
+  const fresh = pub.donations.filter((d) => !view.known.has(d.id));
+  $('feed').innerHTML = pub.donations.map((d) => `
+    <li class="py-3 ${!first && !view.known.has(d.id) ? 'feed-new' : ''}">
+      <div class="flex items-baseline justify-between gap-3">
+        <span class="min-w-0 break-words font-bold">${esc(d.name)}</span>
+        <span class="flex-none font-extrabold tabular-nums text-emerald-800">${rp(d.amount)}</span>
+      </div>
+      ${d.message ? `<p class="mt-0.5 break-words text-slate-800">“${esc(d.message)}”</p>` : ''}
+      <p class="text-sm text-slate-600">${jam(d.ts)}</p>
+    </li>`).join('');
+  $('feedEmpty').hidden = pub.donations.length > 0;
+  pub.donations.forEach((d) => view.known.add(d.id));
+
+  if (!first && fresh.length) {
+    const d = fresh[0];
+    $('announcer').textContent = `Donasi baru ${rp(d.amount)} dari ${d.name}. Total ${rp(pub.total)}.`;
+    if (window.confetti && !matchMedia('(prefers-reduced-motion: reduce)').matches)
+      confetti({ particleCount: 90, spread: 75, origin: { y: 0.35 }, colors: ['#047857', '#fcd34d', '#ffffff', '#0f172a'] });
+  }
+
+  $('closedBanner').hidden = !pub.closed;
+  if (pub.closed) $('donorCard').hidden = true;
+}
+
+function setBadge(text, tone) {
+  const tones = { live: 'bg-emerald-100 text-emerald-900', wait: 'bg-amber-100 text-amber-900', off: 'bg-slate-200 text-slate-800' };
+  const b = $('connBadge');
+  b.className = 'badge ' + tones[tone];
+  b.textContent = text;
+  b.hidden = false;
+  $('liveDot').classList.toggle('dot-live', tone === 'live');
+}
+
+// =====================================================================
+//  MODE HOST (PANITIA)
+// =====================================================================
+let state = null;       // { room, cfg, donations[], audit[] }
+let bc = null;
+let peer = null;
+const conns = new Set();
+const handled = new Set();
+
+const baseUrl = () => location.href.split(/[?#]/)[0];
+const shareUrl = () => `${baseUrl()}?room=${state.room}&d=${encodeCfg(state.cfg)}`;
+
+function saveState() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+  catch {
+    // Penyimpanan penuh: simpan tanpa pratinjau bukti
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ ...state, audit: state.audit.map((a) => ({ ...a, thumb: null })) })); } catch {}
+  }
+}
+function loadState() {
+  try {
+    const s = JSON.parse(localStorage.getItem(STORE_KEY));
+    return s && s.room && cleanCfg(s.cfg) && Array.isArray(s.donations) && Array.isArray(s.audit) ? s : null;
+  } catch { return null; }
+}
+
+function publicState() {
+  return {
+    room: state.room,
+    cfg: state.cfg,
+    total: state.donations.reduce((sum, d) => sum + d.amount, 0),
+    count: state.donations.length,
+    donations: state.donations.slice(-FEED_LIMIT).reverse(),
+    closed: false,
+  };
+}
+
+function sendAll(msg) {
+  if (bc) bc.postMessage({ dir: 'h2c', ...msg });
+  for (const c of conns) if (c.open) c.send(msg);
+}
+
+function publish() {
+  saveState();
+  const pub = publicState();
+  render(pub);
+  renderAudit();
+  sendAll({ t: 'state', pub });
+}
+
+function hostBadge() {
+  if (!peer || peer.destroyed || !peer.open) return setBadge('Menyambungkan siaran… (tab browser ini tetap sinkron)', 'wait');
+  setBadge(`Siaran aktif · ${conns.size} perangkat terhubung`, 'live');
+}
+
+function startPeer(attempt = 0) {
+  if (!window.Peer) return setBadge('Tanpa internet: hanya sinkron antar-tab', 'off');
+  peer = new Peer(PEER_PREFIX + state.room);
+  const mine = peer;
+  peer.on('open', hostBadge);
+  peer.on('connection', (conn) => {
+    conn.on('open', () => { conns.add(conn); conn.send({ t: 'state', pub: publicState() }); hostBadge(); });
+    conn.on('data', (msg) => { const reply = handle(msg); if (reply && conn.open) conn.send(reply); });
+    const drop = () => { conns.delete(conn); hostBadge(); };
+    conn.on('close', drop);
+    conn.on('error', drop);
+  });
+  peer.on('disconnected', () => { hostBadge(); setTimeout(() => { if (state && peer === mine && !mine.destroyed) mine.reconnect(); }, 2000); });
+  peer.on('error', (err) => {
+    hostBadge();
+    // ID masih dipegang sesi sebelumnya (mis. setelah muat ulang) atau jaringan putus: coba lagi
+    if (['unavailable-id', 'network', 'server-error', 'socket-error', 'socket-closed'].includes(err.type) && attempt < 20) {
+      setTimeout(() => { if (state && peer === mine) { mine.destroy(); startPeer(attempt + 1); } }, 3000);
+    }
+  });
+}
+
+function logAudit(entry) {
+  state.audit.push({ id: uid(), ts: Date.now(), donationId: null, sha: null, dhash: null, ref: null, thumb: null, ...entry });
+}
+
+function addDonation({ name, amount, message, source }, audit) {
+  const id = uid();
+  const ts = Date.now();
+  state.donations.push({ id, name, amount, message, ts, source });
+  logAudit({ ...audit, ts, donationId: id, name, amount });
+  publish();
+}
+
+// Bukti yang pernah diterima (termasuk yang kemudian dibatalkan panitia) tetap diblokir
+const registry = () => state.audit.filter((a) => a.donationId && a.sha);
+
+function mostSimilar(dhash) {
+  let best = null;
+  for (const a of registry()) {
+    if (!a.dhash) continue;
+    const sim = similarity(a.dhash, dhash);
+    if (sim >= DHASH_THRESHOLD && (!best || sim > best.sim)) best = { sim, entry: a };
+  }
+  return best;
+}
+
+// Menangani pesan dari donatur (lewat BroadcastChannel maupun PeerJS)
+function handle(msg) {
+  if (!state || !msg || typeof msg !== 'object') return null;
+  if (msg.t === 'hello') return { t: 'state', pub: publicState() };
+  if (msg.t !== 'precheck' && msg.t !== 'donate') return null;
+
+  const reqId = clip(msg.reqId, 24);
+  if (!reqId || handled.has(reqId)) return null;   // permintaan sama dari dua kanal: proses sekali
+  handled.add(reqId);
+  const verdict = (v) => ({ t: 'verdict', reqId, ...v });
+
+  const d = msg.d || {};
+  const sha = /^[0-9a-f]{64}$/.test(d.sha) ? d.sha : null;
+  const dhash = /^[0-9a-f]{16}$/.test(d.dhash) ? d.dhash : null;
+  const name = clip(d.name, 60) || 'Hamba Allah';
+  const amount = Number(d.amount);
+  const base = { name, amount: Number.isSafeInteger(amount) ? amount : 0, sha, dhash };
+  if (!sha || !dhash) return verdict({ ok: false, layer: 0, reason: 'Data verifikasi tidak lengkap.' });
+
+  const reject = (layer, reason, extra = {}) => {
+    logAudit({ ...base, ...extra, status: 'rejected', layer, note: reason });
+    publish();
+    return verdict({ ok: false, layer, reason });
+  };
+
+  // Lapis 1 — berkas identik
+  if (registry().some((a) => a.sha === sha))
+    return reject(1, 'Berkas bukti identik 100% dengan bukti transfer yang sudah tercatat.');
+
+  // Lapis 2 — kemiripan visual
+  const sim = mostSimilar(dhash);
+  const simPct = sim ? Math.round(sim.sim * 100) : 0;
+
+  if (msg.t === 'precheck') {
+    if (sim && !sim.entry.ref)
+      return reject(2, `Gambar ${simPct}% mirip dengan bukti transfer yang sudah tercatat.`);
+    return verdict({ ok: true, similar: sim ? simPct : 0 });
+  }
+
+  // ---- t === 'donate' ----
+  const ref = d.ref ? clip(d.ref, 32).toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
+  const thumb = typeof d.thumb === 'string' && d.thumb.startsWith('data:image/jpeg;base64,') && d.thumb.length < 80000 ? d.thumb : null;
+  const extra = { ref, thumb };
+
+  if (!Number.isSafeInteger(amount) || amount < MIN_NOMINAL || amount > MAX_NOMINAL)
+    return reject(0, 'Nominal tidak valid (minimal ' + rp(MIN_NOMINAL) + ').', extra);
+
+  let note = '';
+  if (sim) {
+    // Struk dari aplikasi bank yang sama bisa tampak mirip: hanya lolos bila nomor referensinya terbaca dan berbeda
+    if (!ref || !sim.entry.ref || ref === sim.entry.ref)
+      return reject(2, `Gambar ${simPct}% mirip dengan bukti transfer yang sudah tercatat.`, extra);
+    note = `Mirip visual ${simPct}% dengan struk lain, tetapi nomor referensi berbeda. `;
+  }
+
+  // Lapis 3 — nomor referensi sudah pernah dipakai
+  if (ref && registry().some((a) => a.ref === ref))
+    return reject(3, `Nomor referensi ${ref} sudah pernah tercatat.`, extra);
+
+  let status = 'valid';
+  if (d.ocr === 'match') note += 'Nominal cocok dengan struk.';
+  else if (d.ocr === 'mismatch') { status = 'review'; note += 'Nominal tidak ditemukan pada teks struk.'; }
+  else { status = 'review'; note += 'OCR tidak tersedia; struk belum terbaca.'; }
+  if (sim) status = 'review';
+  if (!ref) note += ' No. referensi tidak terbaca.';
+
+  addDonation({ name, amount, message: clip(d.message, 200), source: 'publik' }, { ...base, ...extra, status, layer: 0, note: note.trim() });
+  return verdict({ ok: true, status, note: note.trim() });
+}
+
+// ---------- Log audit ----------
+const STATUS = {
+  valid: ['Valid', 'bg-emerald-100 text-emerald-900'],
+  review: ['Perlu tinjauan', 'bg-amber-100 text-amber-900'],
+  rejected: ['Ditolak', 'bg-red-100 text-red-900'],
+  manual: ['Manual panitia', 'bg-slate-200 text-slate-800'],
+  void: ['Dibatalkan', 'bg-slate-200 text-slate-800'],
+};
+
+function renderAudit() {
+  const rows = state.audit.slice().reverse();
+  $('auditEmpty').hidden = rows.length > 0;
+  $('auditRows').innerHTML = rows.map((a) => {
+    const [label, tone] = STATUS[a.status] || STATUS.manual;
+    const layer = a.status === 'rejected' && a.layer ? ` · Lapis ${a.layer}` : '';
+    const active = a.donationId && state.donations.some((d) => d.id === a.donationId);
+    const hash = a.sha
+      ? `<span class="block" title="${esc(a.sha)}">SHA ${esc(a.sha.slice(0, 12))}…</span>
+         <span class="block">dHash ${esc(a.dhash || '-')}</span>
+         <span class="block">Ref ${esc(a.ref || '—')}</span>`
+      : '<span class="text-slate-600">—</span>';
+    return `<tr class="border-b border-slate-200 align-top">
+      <td class="py-2.5 pr-3 tabular-nums text-slate-700">${jam(a.ts)}</td>
+      <td class="max-w-[10rem] break-words py-2.5 pr-3 font-semibold">${esc(a.name)}</td>
+      <td class="whitespace-nowrap py-2.5 pr-3 font-bold tabular-nums">${a.amount ? rp(a.amount) : '—'}</td>
+      <td class="py-2.5 pr-3"><span class="badge ${tone}">${label}${layer}</span>
+        <span class="mt-1 block max-w-[16rem] text-xs text-slate-700">${esc(a.note || '')}</span></td>
+      <td class="py-2.5 pr-3 font-mono text-xs text-slate-800">${hash}</td>
+      <td class="py-2.5 pr-3">${a.thumb ? `<button type="button" class="btn btn-outline btn-sm" data-proof="${a.id}">Lihat</button>` : '<span class="text-slate-600">—</span>'}</td>
+      <td class="py-2.5">${active ? `<button type="button" class="btn btn-danger btn-sm" data-void="${a.id}">Batalkan</button>` : ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+function csvDownload() {
+  const cell = (v) => {
+    let s = String(v ?? '');
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;     // cegah formula injection di spreadsheet
+    return '"' + s.replace(/"/g, '""') + '"';
+  };
+  const lines = [['Waktu', 'Donatur', 'Nominal', 'Pesan', 'Sumber'].map(cell).join(',')];
+  for (const d of state.donations)
+    lines.push([new Date(d.ts).toLocaleString('id-ID'), d.name, d.amount, d.message, d.source].map(cell).join(','));
+  lines.push(['', 'TOTAL', publicState().total, '', ''].map(cell).join(','));
+  const url = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: `rekap-donasi-${state.room}.csv` });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function startHost(initial) {
+  state = initial;
+  $('setup').hidden = true;
+  $('app').hidden = false;
+  $('shareCard').hidden = false;
+  $('hostPanel').hidden = false;
+  $('liveText').textContent = 'Donasi live · mode panitia';
+
+  const link = shareUrl();
+  $('shareLink').value = link;
+  $('qr').innerHTML = '';
+  try { new QRCode($('qr'), { text: link, width: 184, height: 184, correctLevel: QRCode.CorrectLevel.L }); }
+  catch { $('qr').textContent = 'Kode QR tidak tersedia (butuh internet).'; }
+
+  bc = new BroadcastChannel(PEER_PREFIX + state.room);
+  bc.onmessage = (e) => {
+    const msg = e.data || {};
+    if (msg.dir === 'probe') return bc.postMessage({ dir: 'probe-ack' });
+    if (msg.dir !== 'c2h') return;
+    const reply = handle(msg);
+    if (reply) bc.postMessage({ dir: 'h2c', ...reply });
+  };
+  addEventListener('pagehide', () => bc && bc.postMessage({ dir: 'h2c', t: 'bye' }));
+
+  hostBadge();
+  startPeer();
+  publish();
+}
+
+async function closeSession() {
+  const pub = publicState();
+  const res = await Swal.fire({
+    icon: 'warning',
+    title: 'Tutup sesi acara?',
+    html: `Total akhir <b>${rp(pub.total)}</b> dari <b>${pub.count}</b> donasi.<br>Siaran dihentikan dan seluruh data sesi dihapus dari browser ini. Tindakan ini tidak dapat dibatalkan.`,
+    showCancelButton: true, confirmButtonText: 'Ya, tutup & hapus', cancelButtonText: 'Batal',
+    confirmButtonColor: '#b91c1c', focusCancel: true,
+  });
+  if (!res.isConfirmed) return;
+  sendAll({ t: 'closed', pub: { ...pub, closed: true } });
+  localStorage.removeItem(STORE_KEY);
+  state = null;
+  setTimeout(() => { try { peer && peer.destroy(); } catch {} location.href = baseUrl(); }, 600);
+}
+
+function initHostUi() {
+  bindNominal($('fTarget'));
+  bindNominal($('mAmount'));
+
+  $('setupForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = (id) => $(id).value.trim();
+    const target = parseNominal(v('fTarget'));
+    const accNo = v('fAccNo').replace(/[\s-]/g, '');
+    const ok = [
+      fieldError('fOrganizer', v('fOrganizer') ? '' : 'Nama pengelola wajib diisi.'),
+      fieldError('fEvent', v('fEvent') ? '' : 'Nama acara wajib diisi.'),
+      fieldError('fTarget', target.error ? target.error.replace('Nominal', 'Target dana') : ''),
+      fieldError('fBank', v('fBank') ? '' : 'Nama bank wajib diisi.'),
+      fieldError('fAccNo', /^\d{5,20}$/.test(accNo) ? '' : 'Nomor rekening harus 5–20 digit angka.'),
+      fieldError('fAccName', v('fAccName') ? '' : 'Nama pemilik rekening wajib diisi.'),
+    ].every(Boolean);
+    if (!ok) { const bad = document.querySelector('#setupForm [aria-invalid="true"]'); if (bad) bad.focus(); return; }
+    startHost({
+      room: uid(8),
+      cfg: cleanCfg({ organizer: v('fOrganizer'), event: v('fEvent'), target: target.value, bank: v('fBank'), accNo, accName: v('fAccName') }),
+      createdAt: Date.now(), donations: [], audit: [],
+    });
+    scrollTo({ top: 0 });
+  });
+
+  $('copyLink').onclick = (e) => copyText($('shareLink').value, e.currentTarget);
+  $('csvBtn').onclick = csvDownload;
+  $('closeBtn').onclick = closeSession;
+
+  $('manualForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const amount = parseNominal($('mAmount').value);
+    if (!fieldError('mAmount', amount.error)) return $('mAmount').focus();
+    addDonation(
+      { name: clip($('mName').value, 60) || 'Hamba Allah', amount: amount.value, message: clip($('mMessage').value, 200), source: 'manual' },
+      { status: 'manual', layer: 0, note: 'Dicatat langsung oleh panitia.' });
+    e.target.reset();
+    toast('success', 'Donasi dicatat dan disiarkan');
+  });
+
+  $('auditRows').addEventListener('click', async (e) => {
+    const proofBtn = e.target.closest('[data-proof]');
+    const voidBtn = e.target.closest('[data-void]');
+    if (proofBtn) {
+      const a = state.audit.find((x) => x.id === proofBtn.dataset.proof);
+      if (a && a.thumb) Swal.fire({ title: 'Pratinjau bukti', text: `${a.name} · ${rp(a.amount)}`, imageUrl: a.thumb, imageAlt: 'Pratinjau bukti transfer', confirmButtonText: 'Tutup', confirmButtonColor: '#047857' });
+    }
+    if (voidBtn) {
+      const a = state.audit.find((x) => x.id === voidBtn.dataset.void);
+      if (!a) return;
+      const res = await Swal.fire({
+        icon: 'question', title: 'Batalkan donasi ini?', text: `${a.name} · ${rp(a.amount)} akan dikeluarkan dari total. Buktinya tetap diblokir agar tidak bisa dipakai ulang.`,
+        showCancelButton: true, confirmButtonText: 'Ya, batalkan', cancelButtonText: 'Tidak', confirmButtonColor: '#b91c1c',
+      });
+      if (!res.isConfirmed) return;
+      state.donations = state.donations.filter((d) => d.id !== a.donationId);
+      a.status = 'void';
+      a.note = 'Dibatalkan panitia. ' + (a.note || '');
+      publish();
+    }
+  });
+}
+
+// =====================================================================
+//  MODE DONATUR (CLIENT)
+// =====================================================================
+const client = { room: null, bc: null, bcAlive: false, peer: null, conn: null, retry: 0, closed: false, pending: new Map() };
+
+function clientBadge() {
+  if (client.closed) return setBadge('Sesi ditutup', 'off');
+  const live = client.bcAlive || (client.conn && client.conn.open);
+  setBadge(live ? 'Terhubung live' : 'Menyambungkan ke panitia…', live ? 'live' : 'wait');
+}
+
+function onHostMsg(msg) {
+  if (!msg || typeof msg !== 'object') return;
+  if (msg.t === 'state' || msg.t === 'closed') {
+    const pub = msg.pub;
+    if (!pub || !cleanCfg(pub.cfg) || !Array.isArray(pub.donations)) return;
+    if (msg.t === 'closed') client.closed = true;
+    $('app').hidden = false;
+    if (!client.closed) $('donorCard').hidden = false;
+    render(pub);
+    clientBadge();
+  } else if (msg.t === 'verdict') {
+    const done = client.pending.get(msg.reqId);
+    if (done) { client.pending.delete(msg.reqId); done(msg); }
+  }
+}
+
+// Kirim permintaan ke host lewat semua kanal yang tersedia; host memprosesnya sekali
+function request(msg) {
+  return new Promise((resolve, reject) => {
+    const full = { ...msg, reqId: uid(12) };
+    let sent = false;
+    if (client.bcAlive) { client.bc.postMessage({ dir: 'c2h', ...full }); sent = true; }
+    if (client.conn && client.conn.open) { client.conn.send(full); sent = true; }
+    if (!sent) return reject(new Error('Belum terhubung ke panitia. Pastikan halaman panitia masih terbuka, lalu coba lagi.'));
+    client.pending.set(full.reqId, resolve);
+    setTimeout(() => {
+      if (client.pending.delete(full.reqId)) reject(new Error('Panitia tidak merespons. Coba lagi sebentar lagi.'));
+    }, 15000);
+  });
+}
+
+function dial() {
+  clearTimeout(client.retry);
+  if (client.closed || !client.peer || client.peer.destroyed) return;
+  if (client.peer.disconnected) { try { client.peer.reconnect(); } catch {} return redial(); }
+  if (client.conn && client.conn.open) return;
+  const conn = client.peer.connect(PEER_PREFIX + client.room, { reliable: true, serialization: 'json' });
+  client.conn = conn;
+  conn.on('open', () => { conn.send({ t: 'hello' }); clientBadge(); });
+  conn.on('data', onHostMsg);
+  const lost = () => { if (client.conn === conn) client.conn = null; clientBadge(); redial(); };
+  conn.on('close', lost);
+  conn.on('error', lost);
+}
+function redial() {
+  clearTimeout(client.retry);
+  if (!client.closed) client.retry = setTimeout(dial, 3500);
+}
+
+function startClient(room, cfgFromLink) {
+  client.room = room;
+  $('setup').hidden = true;
+  $('app').hidden = false;
+
+  // Tampilkan detail acara dari link sambil menunggu data live
+  if (cfgFromLink) {
+    $('donorCard').hidden = false;
+    render({ room, cfg: cfgFromLink, total: 0, count: 0, donations: [], closed: false });
+    view.known = null; // data pertama dari panitia bukan "donasi baru"
+  }
+  const saved = loadState();
+  if (saved && saved.room === room) { $('hostHint').hidden = false; $('hostHintLink').href = baseUrl(); }
+  clientBadge();
+
+  // Kanal 1: tab lain di browser yang sama
+  client.bc = new BroadcastChannel(PEER_PREFIX + room);
+  client.bc.onmessage = (e) => {
+    const msg = e.data || {};
+    if (msg.dir !== 'h2c') return;
+    if (msg.t === 'bye') { client.bcAlive = false; return clientBadge(); }
+    client.bcAlive = true;
+    onHostMsg(msg);
+  };
+  client.bc.postMessage({ dir: 'c2h', t: 'hello' });
+
+  // Kanal 2: lintas perangkat lewat WebRTC
+  if (window.Peer) {
+    client.peer = new Peer();
+    client.peer.on('open', dial);
+    client.peer.on('disconnected', redial);
+    client.peer.on('error', () => { clientBadge(); redial(); }); // mis. panitia belum online
+  }
+  initDonorUi();
+}
+
+async function makeThumb(img) {
+  return fitCanvas(img, 240).toDataURL('image/jpeg', 0.6);
+}
+
+async function submitDonation() {
+  const anon = $('dAnon').checked;
+  const name = $('dName').value.trim();
+  const amount = parseNominal($('dAmount').value);
+  const file = $('dProof').files[0];
+  let fileErr = '';
+  if (!file) fileErr = 'Bukti transfer wajib diunggah.';
+  else if (!['image/jpeg', 'image/png'].includes(file.type)) fileErr = 'Bukti harus berupa gambar JPG atau PNG.';
+  else if (file.size > MAX_FILE) fileErr = 'Ukuran bukti maksimal 5 MB.';
+  const ok = [
+    fieldError('dName', anon || name ? '' : 'Isi nama, atau centang “Hamba Allah”.'),
+    fieldError('dAmount', amount.error),
+    fieldError('dProof', fileErr),
+  ].every(Boolean);
+  if (!ok) { const bad = document.querySelector('#donateForm [aria-invalid="true"]'); if (bad) bad.focus(); return; }
+  if (!window.Swal) return alert('Komponen tampilan gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.');
+
+  const btn = $('dSubmit');
+  btn.disabled = true;
+  const started = performance.now();
+  const d = { name: anon ? 'Hamba Allah' : name, amount: amount.value, message: $('dMessage').value.trim() };
+  let failedStep = 'sha';
+  try {
+    scanOpen();
+
+    // Lapis 1
+    scanSet('sha', 'run', 'Menghitung sidik jari kriptografis…');
+    d.sha = await sha256Hex(await file.arrayBuffer());
+
+    // Lapis 2
+    failedStep = 'dhash';
+    scanSet('dhash', 'run', 'Menghitung sidik jari visual 9×8…');
+    const img = await loadImage(file);
+    d.dhash = dHashHex(img);
+
+    const pre = await request({ t: 'precheck', d: { name: d.name, amount: d.amount, sha: d.sha, dhash: d.dhash } });
+    if (!pre.ok) {
+      const step = pre.layer === 1 ? 'sha' : 'dhash';
+      if (step === 'dhash') scanSet('sha', 'ok', 'Berkas belum pernah diunggah.');
+      else scanSet('dhash', 'wait', 'Dilewati.');
+      scanSet(step, 'fail', pre.reason);
+      return rejected(pre);
+    }
+    scanSet('sha', 'ok', `Unik · ${d.sha.slice(0, 16)}…`);
+    if (pre.similar) scanSet('dhash', 'warn', `Mirip ${pre.similar}% dengan struk lain — dipastikan lewat nomor referensi.`);
+    else scanSet('dhash', 'ok', `Tidak ada gambar serupa · ${d.dhash}`);
+
+    // Lapis 3
+    failedStep = 'ocr';
+    scanSet('ocr', 'run', 'Menyiapkan mesin OCR…');
+    try {
+      const text = await ocrText(img, (label) => scanSet('ocr', 'run', label));
+      d.ref = referenceInText(text);
+      d.ocr = amountsInText(text).has(d.amount) ? 'match' : 'mismatch';
+      scanSet('ocr', d.ocr === 'match' ? 'ok' : 'warn',
+        (d.ocr === 'match' ? `Nominal ${rp(d.amount)} cocok.` : `Nominal ${rp(d.amount)} tidak ditemukan pada struk.`) +
+        (d.ref ? ` Ref ${d.ref}.` : ' No. referensi tidak terbaca.'));
+    } catch (ocrErr) {
+      d.ref = null; d.ocr = 'unavailable';
+      scanSet('ocr', 'warn', 'Teks struk tidak dapat dibaca otomatis; panitia akan meninjau.');
+    }
+
+    // Pengesahan
+    failedStep = 'final';
+    scanSet('final', 'run', 'Mengirim ke panitia…');
+    d.thumb = await makeThumb(img);
+    const res = await request({ t: 'donate', d });
+    if (!res.ok) {
+      scanSet(res.layer === 2 ? 'dhash' : res.layer === 3 ? 'ocr' : 'final', 'fail', res.reason);
+      if (res.layer) scanSet('final', 'fail', 'Donasi tidak disahkan.');
+      return rejected(res);
+    }
+    scanSet('final', 'ok', 'Disahkan dan disiarkan.');
+    const secs = ((performance.now() - started) / 1000).toLocaleString('id-ID', { maximumFractionDigits: 1 });
+    await new Promise((r) => setTimeout(r, 700));
+    $('donateForm').reset();
+    $('dName').disabled = false;
+    $('dPreview').hidden = true;
+    Swal.fire({
+      icon: 'success',
+      title: 'Donasi disahkan',
+      text: `Terima kasih, ${d.name}. Donasi ${rp(d.amount)} sudah tampil di semua layar (verifikasi ${secs} detik).` +
+        (res.status === 'review' ? ' Catatan: struk Anda ditandai untuk ditinjau panitia.' : ''),
+      confirmButtonText: 'Selesai', confirmButtonColor: '#047857',
+    });
+  } catch (err) {
+    scanSet(failedStep, 'fail', err.message);
+    await new Promise((r) => setTimeout(r, 500));
+    Swal.fire({ icon: 'error', title: 'Verifikasi tidak selesai', text: err.message, confirmButtonText: 'Tutup', confirmButtonColor: '#047857' });
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function rejected(v) {
+  await new Promise((r) => setTimeout(r, 1200));
+  return Swal.fire({
+    icon: 'error',
+    title: v.layer ? `Bukti ditolak · Lapis ${v.layer}` : 'Donasi ditolak',
+    text: v.reason + (v.layer ? ' Unggah bukti transfer asli dari transaksi Anda sendiri, atau hubungi panitia.' : ''),
+    confirmButtonText: 'Tutup', confirmButtonColor: '#047857',
+  });
+}
+
+function initDonorUi() {
+  bindNominal($('dAmount'));
+  $('copyAcc').onclick = (e) => copyText($('accNo').textContent, e.currentTarget);
+  $('dAnon').onchange = (e) => { $('dName').disabled = e.target.checked; if (e.target.checked) fieldError('dName', ''); };
+  $('dProof').onchange = (e) => {
+    const file = e.target.files[0];
+    const img = $('dPreview');
+    if (img.src) URL.revokeObjectURL(img.src);
+    img.hidden = !file;
+    if (file) img.src = URL.createObjectURL(file);
+    fieldError('dProof', '');
+  };
+  $('donateForm').addEventListener('submit', (e) => { e.preventDefault(); submitDonation(); });
+}
+
+// =====================================================================
+//  START
+// =====================================================================
+(async function init() {
+  if (window.lucide) lucide.createIcons();
+  $('homeLink').href = baseUrl();
+  const params = new URLSearchParams(location.search);
+  const room = (params.get('room') || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 16);
+
+  // Dibuka dari shareable link -> mode donatur
+  if (room) return startClient(room, decodeCfg(params.get('d')));
+
+  initHostUi();
+  const saved = loadState();
+  if (!saved) { $('setup').hidden = false; return; }
+
+  // Sesi panitia tersimpan: bila tab panitia lain masih hidup, tab ini cukup menjadi layar penonton
+  const probe = new BroadcastChannel(PEER_PREFIX + saved.room);
+  const alive = await new Promise((resolve) => {
+    probe.onmessage = (e) => { if (e.data && e.data.dir === 'probe-ack') resolve(true); };
+    probe.postMessage({ dir: 'probe' });
+    setTimeout(() => resolve(false), 400);
+  });
+  probe.close();
+  if (alive) return location.replace(`${baseUrl()}?room=${saved.room}&d=${encodeCfg(saved.cfg)}`);
+  startHost(saved);
+})();
+</script>
+</body>
+</html>

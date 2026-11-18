@@ -24,6 +24,7 @@
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
 
   <style type="text/tailwindcss">
     [hidden] { display: none !important; }
@@ -303,6 +304,7 @@ const DHASH_THRESHOLD = 0.9;         // kemiripan visual >= 90% dianggap duplika
 const FEED_LIMIT = 50;
 const STORE_KEY = 'aksidana.host';
 const PEER_PREFIX = 'aksidana-';
+const RELAY_URL = 'wss://broker.emqx.io:8084/mqtt'; // jalur cadangan bila WebRTC diblokir jaringan
 
 // ---------- Utilitas ----------
 const $ = (id) => document.getElementById(id);
@@ -375,6 +377,33 @@ function cleanCfg(c) {
   const target = Number(c.target);
   if (!Number.isSafeInteger(target) || target < MIN_NOMINAL) return null;
   return { organizer: clip(c.organizer, 60), event: clip(c.event, 90), target, bank: clip(c.bank, 30), accNo: clip(c.accNo, 24), accName: clip(c.accName, 60) };
+}
+
+// ---------- Enkripsi jalur cadangan (broker publik hanya melihat data acak) ----------
+// Kunci publik panitia ada di link. Tiap donatur membuat kunci sementara, lalu kedua pihak
+// menurunkan kunci AES-GCM yang sama (ECDH). Hanya pemegang kunci privat panitia yang bisa
+// membalas, sehingga pihak lain tidak dapat membaca maupun memalsukan siaran.
+const ECDH = { name: 'ECDH', namedCurve: 'P-256' };
+const hasCrypto = () => !!(window.crypto && crypto.subtle);
+function b64u(buf) {
+  const bytes = new Uint8Array(buf);
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 8192) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+const unb64u = (s) => Uint8Array.from(atob(String(s).replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+async function deriveAes(privateKey, peerPublicRaw) {
+  const pub = await crypto.subtle.importKey('raw', peerPublicRaw, ECDH, false, []);
+  return crypto.subtle.deriveKey({ name: 'ECDH', public: pub }, privateKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function seal(key, obj) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
+  return { iv: b64u(iv), ct: b64u(ct) };
+}
+async function unseal(key, env) {
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64u(env.iv) }, key, unb64u(env.ct));
+  return JSON.parse(new TextDecoder().decode(pt));
 }
 
 // =====================================================================
@@ -616,7 +645,8 @@ const conns = new Set();
 const handled = new Set();
 
 const baseUrl = () => location.href.split(/[?#]/)[0];
-const shareUrl = () => `${baseUrl()}?room=${state.room}&d=${encodeCfg(state.cfg)}`;
+const linkFor = (s) => `${baseUrl()}?room=${s.room}&d=${encodeCfg(s.cfg)}${s.key ? '&k=' + s.key.pub : ''}`;
+const shareUrl = () => linkFor(state);
 
 function saveState() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
@@ -646,6 +676,10 @@ function publicState() {
 function sendAll(msg) {
   if (bc) bc.postMessage({ dir: 'h2c', ...msg });
   for (const c of conns) if (c.open) c.send(msg);
+  for (const [cid, s] of relaySessions) {
+    if (Date.now() - s.seen > RELAY_TTL) relaySessions.delete(cid);
+    else relaySend(cid, s, msg);
+  }
 }
 
 function publish() {
@@ -657,8 +691,72 @@ function publish() {
 }
 
 function hostBadge() {
-  if (!peer || peer.destroyed || !peer.open) return setBadge('Menyambungkan siaran… (tab browser ini tetap sinkron)', 'wait');
-  setBadge(`Siaran aktif · ${conns.size} perangkat terhubung`, 'live');
+  if (!state) return;
+  const peerUp = peer && !peer.destroyed && peer.open;
+  const relayUp = relay && relay.connected;
+  if (!peerUp && !relayUp) return setBadge('Menyambungkan siaran… (tab browser ini tetap sinkron)', 'wait');
+  let viewers = conns.size;
+  for (const s of relaySessions.values()) if (Date.now() - s.seen <= RELAY_TTL) viewers++;
+  setBadge(`Siaran aktif · ${viewers} perangkat terhubung`, 'live');
+}
+
+// ---------- Jalur cadangan host: broker WebSocket (MQTT), pesan terenkripsi ----------
+const RELAY_TTL = 80000;            // donatur dianggap pergi bila tidak menyapa selama ini
+const relaySessions = new Map();    // cid -> { epk, key, seen }
+let relay = null;
+let relayRoom = '';
+let relaySeq = 0;
+
+async function relaySend(cid, s, msg) {
+  if (!relay || !relay.connected) return;
+  relaySeq = Math.max(relaySeq + 1, Date.now());
+  const topic = `aksidana/${relayRoom}/c/${cid}`;
+  try { relay.publish(topic, JSON.stringify(await seal(s.key, { ...msg, n: relaySeq }))); } catch {}
+}
+
+async function startRelayHost() {
+  if (!hasCrypto() || !window.mqtt || relay) return;
+  // Kunci panitia dibuat sekali per acara dan disimpan bersama sesi
+  if (!state.key) {
+    const pair = await crypto.subtle.generateKey(ECDH, true, ['deriveKey']);
+    state.key = {
+      jwk: await crypto.subtle.exportKey('jwk', pair.privateKey),
+      pub: b64u(await crypto.subtle.exportKey('raw', pair.publicKey)),
+    };
+    saveState();
+  }
+  renderShare();
+  const privateKey = await crypto.subtle.importKey('jwk', state.key.jwk, ECDH, false, ['deriveKey']);
+  relayRoom = state.room;
+  relay = mqtt.connect(RELAY_URL, { clientId: 'ad-h-' + uid(10), reconnectPeriod: 4000, keepalive: 30 });
+  relay.on('connect', () => { relay.subscribe(`aksidana/${relayRoom}/h`); hostBadge(); });
+  relay.on('close', hostBadge);
+  relay.on('error', () => {});
+  relay.on('message', async (_topic, payload) => {
+    try {
+      const env = JSON.parse(payload.toString());
+      const cid = String(env.cid || '').replace(/[^a-z0-9]/g, '').slice(0, 16);
+      if (!cid || typeof env.epk !== 'string' || env.epk.length > 100) return;
+      let s = relaySessions.get(cid);
+      const known = s && s.epk === env.epk;
+      if (!known) s = { epk: env.epk, key: await deriveAes(privateKey, unb64u(env.epk)), seen: 0 };
+      const msg = await unseal(s.key, env);         // gagal dekripsi -> pesan diabaikan
+      if (!known) { if (relaySessions.size >= 500) return; relaySessions.set(cid, s); }
+      s.seen = Date.now();
+      const reply = handle(msg);
+      if (reply) relaySend(cid, s, reply);
+      hostBadge();
+    } catch {}
+  });
+  setInterval(hostBadge, 30000);
+}
+
+function renderShare() {
+  const link = shareUrl();
+  $('shareLink').value = link;
+  $('qr').innerHTML = '';
+  try { new QRCode($('qr'), { text: link, width: 184, height: 184, correctLevel: QRCode.CorrectLevel.L }); }
+  catch { $('qr').textContent = 'Kode QR tidak tersedia (butuh internet).'; }
 }
 
 function startPeer(attempt = 0) {
@@ -836,11 +934,7 @@ function startHost(initial) {
   $('hostPanel').hidden = false;
   $('liveText').textContent = 'Donasi live · mode panitia';
 
-  const link = shareUrl();
-  $('shareLink').value = link;
-  $('qr').innerHTML = '';
-  try { new QRCode($('qr'), { text: link, width: 184, height: 184, correctLevel: QRCode.CorrectLevel.L }); }
-  catch { $('qr').textContent = 'Kode QR tidak tersedia (butuh internet).'; }
+  renderShare();
 
   bc = new BroadcastChannel(PEER_PREFIX + state.room);
   bc.onmessage = (e) => {
@@ -855,6 +949,7 @@ function startHost(initial) {
   hostBadge();
   startPeer();
   publish();
+  startRelayHost().catch(() => {});
 }
 
 async function closeSession() {
@@ -870,7 +965,7 @@ async function closeSession() {
   sendAll({ t: 'closed', pub: { ...pub, closed: true } });
   localStorage.removeItem(STORE_KEY);
   state = null;
-  setTimeout(() => { try { peer && peer.destroy(); } catch {} location.href = baseUrl(); }, 600);
+  setTimeout(() => { try { peer && peer.destroy(); relay && relay.end(true); } catch {} location.href = baseUrl(); }, 900);
 }
 
 function initHostUi() {
@@ -940,11 +1035,54 @@ function initHostUi() {
 // =====================================================================
 //  MODE DONATUR (CLIENT)
 // =====================================================================
-const client = { room: null, bc: null, bcAlive: false, peer: null, conn: null, retry: 0, closed: false, pending: new Map() };
+const client = {
+  room: null, bc: null, bcAlive: false, peer: null, conn: null, retry: 0, closed: false, pending: new Map(),
+  hostPub: null, relay: null, relayStarted: false, rkey: null, epk: '', cid: '', lastN: 0, relaySeen: 0,
+};
+const relayLive = () => Date.now() - client.relaySeen < 70000;
+const directLive = () => client.bcAlive || !!(client.conn && client.conn.open);
+
+// ---------- Jalur cadangan donatur: dipakai bila sambungan langsung tidak berhasil ----------
+async function relayPost(msg) {
+  const r = client.relay;
+  if (!r || !r.connected || !client.rkey) return;
+  try {
+    const env = await seal(client.rkey, msg);
+    r.publish(`aksidana/${client.room}/h`, JSON.stringify({ cid: client.cid, epk: client.epk, ...env }));
+  } catch {}
+}
+
+async function startRelayClient() {
+  if (client.relayStarted || client.closed || !client.hostPub || !hasCrypto() || !window.mqtt) return;
+  client.relayStarted = true;
+  try {
+    const pair = await crypto.subtle.generateKey(ECDH, true, ['deriveKey']);
+    client.rkey = await deriveAes(pair.privateKey, unb64u(client.hostPub));
+    client.epk = b64u(await crypto.subtle.exportKey('raw', pair.publicKey));
+    client.cid = uid(12);
+  } catch { return; }
+  const r = mqtt.connect(RELAY_URL, { clientId: 'ad-c-' + client.cid, reconnectPeriod: 4000, keepalive: 30 });
+  client.relay = r;
+  r.on('connect', () => r.subscribe(`aksidana/${client.room}/c/${client.cid}`, () => relayPost({ t: 'hello' })));
+  r.on('error', () => {});
+  r.on('message', async (_topic, payload) => {
+    try {
+      const msg = await unseal(client.rkey, JSON.parse(payload.toString()));
+      client.relaySeen = Date.now();
+      if (msg.t === 'state' || msg.t === 'closed') {
+        if (!(msg.n > client.lastN)) return;   // abaikan siaran lama yang diputar ulang
+        client.lastN = msg.n;
+      }
+      onHostMsg(msg);
+      clientBadge();
+    } catch {}
+  });
+  setInterval(() => { if (!client.closed) relayPost({ t: 'hello' }); clientBadge(); }, 25000);
+}
 
 function clientBadge() {
   if (client.closed) return setBadge('Sesi ditutup', 'off');
-  const live = client.bcAlive || (client.conn && client.conn.open);
+  const live = directLive() || relayLive();
   setBadge(live ? 'Terhubung live' : 'Menyambungkan ke panitia…', live ? 'live' : 'wait');
 }
 
@@ -971,6 +1109,7 @@ function request(msg) {
     let sent = false;
     if (client.bcAlive) { client.bc.postMessage({ dir: 'c2h', ...full }); sent = true; }
     if (client.conn && client.conn.open) { client.conn.send(full); sent = true; }
+    if (relayLive()) { relayPost(full); sent = true; }
     if (!sent) return reject(new Error('Belum terhubung ke panitia. Pastikan halaman panitia masih terbuka, lalu coba lagi.'));
     client.pending.set(full.reqId, resolve);
     setTimeout(() => {
@@ -997,8 +1136,11 @@ function redial() {
   if (!client.closed) client.retry = setTimeout(dial, 3500);
 }
 
-function startClient(room, cfgFromLink) {
+function startClient(room, cfgFromLink, hostPub) {
   client.room = room;
+  client.hostPub = /^[A-Za-z0-9_-]{80,90}$/.test(hostPub || '') ? hostPub : null;
+  // Bila sambungan langsung belum berhasil dalam 5 detik (atau putus), pakai jalur cadangan
+  setInterval(() => { if (!client.closed && !directLive()) startRelayClient(); }, 5000);
   $('setup').hidden = true;
   $('app').hidden = false;
 
@@ -1166,7 +1308,7 @@ function initDonorUi() {
   const room = (params.get('room') || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 16);
 
   // Dibuka dari shareable link -> mode donatur
-  if (room) return startClient(room, decodeCfg(params.get('d')));
+  if (room) return startClient(room, decodeCfg(params.get('d')), params.get('k'));
 
   initHostUi();
   const saved = loadState();
@@ -1180,7 +1322,7 @@ function initDonorUi() {
     setTimeout(() => resolve(false), 400);
   });
   probe.close();
-  if (alive) return location.replace(`${baseUrl()}?room=${saved.room}&d=${encodeCfg(saved.cfg)}`);
+  if (alive) return location.replace(linkFor(saved));
   startHost(saved);
 })();
 </script>

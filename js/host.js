@@ -264,18 +264,12 @@ function renderAudit() {
     const [label, tone] = STATUS[a.status] || STATUS.manual;
     const layer = a.status === 'rejected' && a.layer ? ` · Lapis ${a.layer}` : '';
     const active = a.donationId && state.donations.some((d) => d.id === a.donationId);
-    const hash = a.sha
-      ? `<span class="block" title="${esc(a.sha)}">SHA ${esc(a.sha.slice(0, 12))}…</span>
-         <span class="block">dHash ${esc(a.dhash || '-')}</span>
-         <span class="block">Ref ${esc(a.ref || '—')}</span>`
-      : '<span class="text-slate-600">—</span>';
     return `<tr class="border-b border-slate-200 align-top">
       <td class="py-2.5 pr-3 tabular-nums text-slate-700">${jam(a.ts)}</td>
       <td class="max-w-[10rem] break-words py-2.5 pr-3 font-semibold">${esc(a.name)}</td>
       <td class="whitespace-nowrap py-2.5 pr-3 font-bold tabular-nums">${a.amount ? rp(a.amount) : '—'}</td>
       <td class="py-2.5 pr-3"><span class="badge ${tone}">${label}${layer}</span>
         <span class="mt-1 block max-w-[16rem] text-xs text-slate-700">${esc(a.note || '')}</span></td>
-      <td class="py-2.5 pr-3 font-mono text-xs text-slate-800">${hash}</td>
       <td class="py-2.5 pr-3">${a.thumb ? `<button type="button" class="btn btn-outline btn-sm" data-proof="${a.id}">Lihat</button>` : '<span class="text-slate-600">—</span>'}</td>
       <td class="py-2.5">${active ? `<button type="button" class="btn btn-danger btn-sm" data-void="${a.id}">Batalkan</button>` : ''}</td>
     </tr>`;

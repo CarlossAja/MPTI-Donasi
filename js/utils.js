@@ -16,7 +16,8 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const rp = (n) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
 const clip = (v, max) => String(v ?? '').trim().slice(0, max);
-const jam = (ts) => new Date(ts).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+// Selalu dalam zona WIB, apa pun zona waktu perangkat yang membuka halaman
+const jam = (ts) => new Date(ts).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }) + ' WIB';
 
 function uid(len = 10) {
   const a = new Uint8Array(len);
